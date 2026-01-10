@@ -1,147 +1,118 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import "./App.css";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 
-type TodoTypes = {
-  id: number;
-  text: string;
-  status: "completed" | "pending" | "in-progress";
-  dateCreated?: Date;
-};
+import { useForm, type SubmitHandler } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { v4 as uuidv4 } from "uuid";
+import dayjs from "dayjs";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "./components/ui/form";
+import { todoSchema, type Todo, type TodoInput } from "./schemas/todo.schema";
+import Spinner from "./components/Spinner";
 
 function App() {
-  const [selectedTodoId, setSelectedTodoId] = useState<number | null>(null);
-  const [todos, setTodos] = useState<TodoTypes[]>([]);
-  const [modalOpen, setModalOpen] = useState(false);
-  const [inputValue, setInputValue] = useState<string | undefined>("");
-  const updateInputRef = useRef<HTMLInputElement>(null);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [isUpdating, setIsUpdating] = useState<boolean>(false);
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
-  };
+  const createForm = useForm<TodoInput>({
+    resolver: zodResolver(todoSchema),
+    defaultValues: {
+      title: "",
+    },
+  });
 
-  const addTodo = () => {
-    if (inputValue) {
-      const newTodo: TodoTypes = {
-        id: Date.now(),
-        text: inputValue,
-        status: "pending",
-        dateCreated: new Date(),
-      };
-      setTodos([...todos, newTodo]);
-    } else {
-      alert("Please enter a todo");
-    }
-    setInputValue("");
-  };
+  const onSubmit: SubmitHandler<TodoInput> = async (data) => {
+    // Convert input → output (apply defaults)
+    const todo: Todo = todoSchema.parse(data);
 
-  const updateTodo = (id: number, updatedFields: Partial<TodoTypes>) => {
-    setTodos((prevTodos) =>
-      prevTodos.map((todo) =>
-        todo.id === id ? { ...todo, ...updatedFields } : todo
-      )
-    );
-  };
+    setTodos((prev) => [...prev, todo]);
 
-  const onCompleteTodo = (id: number) => {
-    updateTodo(id, { status: "completed" });
-  };
-
-  const onOpenModal = (todoId: number) => {
-    setSelectedTodoId(todoId);
-    setModalOpen(true);
-    const todo = todos.find((t) => t.id === todoId);
-    if (todo && updateInputRef.current) {
-      updateInputRef.current.value = todo.text;
-    }
-  };
-
-  const onCloseModal = () => {
-    setModalOpen(false);
-    setSelectedTodoId(null);
+    createForm.reset(); // optional: clear input
   };
 
   return (
-    <section className="flex flex-col items-center justify-center gap-4 h-screen">
-      <div className="flex flex-col items-center justify-center gap-4 w-lg">
-        <h1>REACT TODO APP</h1>
-        {todos.length === 0 && (
-          <div className="flex flex-col justify-center items-center w-full h-full">
-            <p>No todos available. Please add some tasks.</p>
+    <section className="flex flex-col items-center justify-center h-screen gap-4">
+      <div className="flex flex-col items-center bg-white dark:bg-gray-800 p-8 rounded-lg shadow-lg w-full h-full md:w-3/4 lg:w-1/2 xl:w-1/3">
+        <h1 className="text-2xl font-bold text-neutral-800">
+          React + Vite Todo App
+        </h1>
+
+        <div
+          className={`flex flex-col items-center justify-between w-md h-full`}
+        >
+          <div
+            className={`flex flex-col items-center ${
+              todos.length === 0 ? "justify-center" : "justify-between"
+            } w-md h-full`}
+          >
+            {todos.length === 0 && <p>No todos yet!</p>}
+
+            {todos.map((todo) => (
+              <div key={todo.id} className="border-b border-gray-200 py-2">
+                <p>{todo.title}</p>
+                <p className="text-sm text-gray-500">
+                  {dayjs(todo.dateCreated).format("MM/DD/YYYY")}
+                </p>
+              </div>
+            ))}
           </div>
-        )}
-        <div className="flex flex-col items-start w-full overflow-y-auto h-96 gap-2">
-          {todos.map((todo) => (
-            <div
-              key={todo.id}
-              className="flex items-center justify-between w-full p-3 border rounded cursor-pointer"
-              onClick={() =>
-                todo.status !== "completed" && onOpenModal(todo.id)
-              }
+
+          <Form {...createForm}>
+            <form
+              onSubmit={createForm.handleSubmit(onSubmit)}
+              className="w-full flex items-center justify-between gap-2"
             >
-              <span
-                className={todo.status === "completed" ? "line-through" : ""}
+              <fieldset
+                className="flex flex-col gap-3 w-full"
+                disabled={isUpdating}
               >
-                {todo.text}
-              </span>
+                <div className="w-full flex flex-col gap-2">
+                  <FormField
+                    control={createForm.control}
+                    name="title"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            type="text"
+                            placeholder="Enter your todo title"
+                            className="w-full"
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </fieldset>
               <Button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onCompleteTodo(todo.id);
-                }}
-                disabled={todo.status === "completed"}
+                variant="default"
+                type="submit"
+                disabled={createForm.formState.isSubmitting}
               >
-                {todo.status === "completed" ? "Completed" : "Complete"}
+                {createForm.formState.isSubmitting ? (
+                  <>
+                    <Spinner />
+                    <span className="sr-only">Loading...</span>
+                    Loading
+                  </>
+                ) : (
+                  "Add Todo"
+                )}
               </Button>
-            </div>
-          ))}
+            </form>
+          </Form>
         </div>
       </div>
-      <form className="form-container" onSubmit={(e) => e.preventDefault()}>
-        <Input
-          type="text"
-          placeholder="Enter todo"
-          value={inputValue}
-          onChange={(value) => handleInputChange(value)}
-        />
-        <Button onClick={addTodo} type="submit">
-          Add
-        </Button>
-      </form>
-      {/* {modalOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <button onClick={onCloseModal}>Close Modal</button>
-            <form
-              className="update-form-container"
-              onSubmit={(e) => e.preventDefault()}
-            >
-              <input
-                type="text"
-                placeholder="Update todo"
-                ref={updateInputRef}
-              />
-              <button
-                onClick={() => {
-                  if (updateInputRef.current) {
-                    if (selectedTodoId) {
-                      updateTodo(selectedTodoId, {
-                        text: updateInputRef.current.value,
-                      });
-                      updateInputRef.current.value = "";
-                      onCloseModal();
-                    }
-                  }
-                }}
-                type="submit"
-              >
-                Update
-              </button>
-            </form>
-          </div>
-        </div>
-      )} */}
     </section>
   );
 }
